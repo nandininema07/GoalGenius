@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useTheme } from "@/components/ThemeProvider";
 import { useAuth } from "@/hooks/useAuth";
+import { useLocation } from "wouter";
 import { 
   ChartLine, 
   Calendar, 
@@ -19,17 +20,23 @@ interface SidebarProps {
 export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const { theme, setTheme } = useTheme();
   const { user } = useAuth();
+  const [location, setLocation] = useLocation();
 
   const toggleTheme = () => {
     setTheme(theme === "light" ? "dark" : "light");
   };
 
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: ChartLine },
-    { id: 'calendar', label: 'Calendar', icon: Calendar },
-    { id: 'ai-chat', label: 'AI Chat', icon: Bot },
-    { id: 'analytics', label: 'Analytics', icon: BarChart3 },
+    { id: 'dashboard', label: 'Dashboard', icon: ChartLine, path: '/' },
+    { id: 'calendar', label: 'Calendar', icon: Calendar, path: '/calendar' },
+    { id: 'ai-chat', label: 'AI Chat', icon: Bot, path: '/ai-chat' },
+    { id: 'analytics', label: 'Analytics', icon: BarChart3, path: '/analytics' },
   ];
+
+  const handleNavigation = (item: typeof navItems[0]) => {
+    setLocation(item.path);
+    onTabChange(item.id);
+  };
 
   const getUserInitials = () => {
     if (user?.firstName && user?.lastName) {
@@ -60,16 +67,17 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
         <nav className="space-y-2">
           {navItems.map((item) => {
             const Icon = item.icon;
+            const isActive = location === item.path || (item.path === '/' && location === '/');
             return (
               <Button
                 key={item.id}
-                variant={activeTab === item.id ? "default" : "ghost"}
+                variant={isActive ? "default" : "ghost"}
                 className={`w-full justify-start ${
-                  activeTab === item.id 
+                  isActive 
                     ? "bg-primary-500 text-white hover:bg-primary-600" 
                     : "text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
                 }`}
-                onClick={() => onTabChange(item.id)}
+                onClick={() => handleNavigation(item)}
               >
                 <Icon className="w-4 h-4 mr-3" />
                 {item.label}

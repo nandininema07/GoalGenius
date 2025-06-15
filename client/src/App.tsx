@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -6,7 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { useAuth } from "@/hooks/useAuth";
 import { Sidebar } from "@/components/Sidebar";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 
 // Pages
 import Landing from "@/pages/landing";
@@ -17,7 +17,21 @@ import Analytics from "@/pages/analytics";
 import NotFound from "@/pages/not-found";
 
 function AuthenticatedApp() {
+  const [location] = useLocation();
   const [activeTab, setActiveTab] = useState("dashboard");
+
+  // Update active tab based on current route
+  useEffect(() => {
+    if (location === '/') {
+      setActiveTab('dashboard');
+    } else if (location === '/calendar') {
+      setActiveTab('calendar');
+    } else if (location === '/ai-chat') {
+      setActiveTab('ai-chat');
+    } else if (location === '/analytics') {
+      setActiveTab('analytics');
+    }
+  }, [location]);
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
