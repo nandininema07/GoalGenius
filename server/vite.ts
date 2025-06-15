@@ -23,7 +23,6 @@ export async function setupVite(app: Express, server: Server) {
   const serverOptions = {
     middlewareMode: true,
     hmr: { server },
-    allowedHosts: true,
   };
 
   const vite = await createViteServer({
@@ -40,9 +39,43 @@ export async function setupVite(app: Express, server: Server) {
     appType: "custom",
   });
 
+  // Add proper MIME type handling
+  app.use((req, res, next) => {
+    if (req.url?.endsWith('.js')) {
+      res.type('application/javascript');
+    } else if (req.url?.endsWith('.mjs')) {
+      res.type('application/javascript');
+    } else if (req.url?.endsWith('.ts')) {
+      res.type('application/javascript');
+    } else if (req.url?.endsWith('.tsx')) {
+      res.type('application/javascript');
+    }
+    next();
+  });
+
   app.use(vite.middlewares);
+
+  // Handle SPA routing
   app.use("*", async (req, res, next) => {
     const url = req.originalUrl;
+
+    // Skip API routes - let them be handled by the API routes
+    if (url.startsWith('/api')) {
+      return next();
+    }
+
+    // Skip Vite's development server requests
+    if (url.startsWith('/@vite') || 
+        url.startsWith('/@react-refresh') || 
+        url.startsWith('/src/') ||
+        url.startsWith('/node_modules/')) {
+      return next();
+    }
+
+    // Skip static files
+    if (url.match(/\.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$/)) {
+      return next();
+    }
 
     try {
       const clientTemplate = path.resolve(

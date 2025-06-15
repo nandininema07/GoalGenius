@@ -1,7 +1,7 @@
-import { Button } from "@/components/ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { useTheme } from "@/components/ThemeProvider";
-import { useAuth } from "@/hooks/useAuth";
+import { Button } from "./ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "./ui/avatar";
+import { useTheme } from "./ThemeProvider";
+import { useAuth } from "../hooks/useAuth";
 import { useLocation } from "wouter";
 import { 
   ChartLine, 
@@ -27,7 +27,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   };
 
   const navItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: ChartLine, path: '/' },
+    { id: 'dashboard', label: 'Dashboard', icon: ChartLine, path: '/dashboard' },
     { id: 'calendar', label: 'Calendar', icon: Calendar, path: '/calendar' },
     { id: 'ai-chat', label: 'AI Chat', icon: Bot, path: '/ai-chat' },
     { id: 'analytics', label: 'Analytics', icon: BarChart3, path: '/analytics' },

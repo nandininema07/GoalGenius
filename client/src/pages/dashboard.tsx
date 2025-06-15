@@ -1,7 +1,10 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { BalanceMeter } from "@/components/BalanceMeter";
-import { Flame, Scale, CheckCircle, TrendingUp, Clock, Circle } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { Button } from "../components/ui/button";
+import { useAuth } from "../hooks/useAuth";
+import { BalanceMeter } from "../components/BalanceMeter";
+import { Flame, Scale, CheckCircle, TrendingUp, Clock, Circle, ChartLine, Moon, Sun } from "lucide-react";
 
 export default function Dashboard() {
   const { data: stats, isLoading } = useQuery({

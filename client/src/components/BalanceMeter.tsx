@@ -1,9 +1,12 @@
+import { useEffect } from 'react';
+
 interface BalanceMeterProps {
   score: number;
   size?: number;
+  onScoreUpdate?: (newScore: number) => void;
 }
 
-export function BalanceMeter({ score, size = 200 }: BalanceMeterProps) {
+export function BalanceMeter({ score, size = 200, onScoreUpdate }: BalanceMeterProps) {
   const radius = size / 2 - 10;
   const circumference = 2 * Math.PI * radius;
   const strokeDasharray = circumference;

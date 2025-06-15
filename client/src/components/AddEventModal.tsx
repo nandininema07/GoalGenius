@@ -1,13 +1,14 @@
-import { useState } from "react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useState, useEffect } from "react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../components/ui/dialog";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Label } from "../components/ui/label";
+import { Textarea } from "../components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
+import { apiRequest } from "../lib/queryClient";
+import { useToast } from "../hooks/use-toast";
+import { useWebSocket } from "../services/websocket";
 
 interface AddEventModalProps {
   isOpen: boolean;
@@ -26,16 +27,19 @@ export function AddEventModal({ isOpen, onClose, defaultDate }: AddEventModalPro
 
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { sendMessage } = useWebSocket();
 
   const createEventMutation = useMutation({
     mutationFn: async (eventData: any) => {
       return await apiRequest("POST", "/api/events", eventData);
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       toast({
         title: "Success",
         description: "Event created successfully",
       });
+      // Notify other clients about the new event
+      sendMessage('eventCreated', data);
       queryClient.invalidateQueries({ queryKey: ["/api/events"] });
       queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
       onClose();

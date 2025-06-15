@@ -1,6 +1,9 @@
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { useTheme } from "@/components/ThemeProvider";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { Button } from "../components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { useTheme } from "next-themes";
+import { useAuth } from "../hooks/useAuth";
 import { 
   ChartLine, 
   Bot, 
@@ -12,9 +15,11 @@ import {
   Moon,
   Sun
 } from "lucide-react";
+import { useLocation } from "wouter";
 
 export default function Landing() {
   const { theme, setTheme } = useTheme();
+  const [, setLocation] = useLocation();
 
   const toggleTheme = () => {
     setTheme(theme === "light" ? "dark" : "light");
@@ -107,13 +112,13 @@ export default function Landing() {
               </Button>
               <Button
                 variant="ghost"
-                onClick={() => window.location.href = '/api/login'}
+                onClick={() => setLocation('/auth/login')}
                 className="text-primary-500 hover:text-primary-600"
               >
                 Log In
               </Button>
               <Button
-                onClick={() => window.location.href = '/api/login'}
+                onClick={() => setLocation('/auth/register')}
                 className="bg-primary-500 hover:bg-primary-600"
               >
                 Sign Up
@@ -141,7 +146,7 @@ export default function Landing() {
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Button
                 size="lg"
-                onClick={() => window.location.href = '/api/login'}
+                onClick={() => setLocation('/auth/register')}
                 className="bg-primary-500 hover:bg-primary-600 text-white px-8 py-4 text-lg transform hover:scale-105 transition-all"
               >
                 Start Your Journey
@@ -251,7 +256,7 @@ export default function Landing() {
           </p>
           <Button
             size="lg"
-            onClick={() => window.location.href = '/api/login'}
+            onClick={() => setLocation('/auth/register')}
             className="bg-primary-500 hover:bg-primary-600 text-white px-8 py-4 text-lg transform hover:scale-105 transition-all"
           >
             Get Started Today

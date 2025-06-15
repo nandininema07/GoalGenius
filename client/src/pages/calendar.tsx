@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { AddEventModal } from "@/components/AddEventModal";
+import { Button } from "../components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
+import { AddEventModal } from "../components/AddEventModal";
 import { Plus, ChevronLeft, ChevronRight } from "lucide-react";
 
 export default function Calendar() {

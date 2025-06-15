@@ -14,39 +14,27 @@ import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 import { relations } from "drizzle-orm";
 
-// Session storage table (mandatory for Replit Auth)
-export const sessions = pgTable(
-  "sessions",
-  {
-    sid: varchar("sid").primaryKey(),
-    sess: jsonb("sess").notNull(),
-    expire: timestamp("expire").notNull(),
-  },
-  (table) => [index("IDX_session_expire").on(table.expire)],
-);
-
-// User storage table (mandatory for Replit Auth)
+// User storage table with simple authentication
 export const users = pgTable("users", {
-  id: varchar("id").primaryKey().notNull(),
-  email: varchar("email").unique(),
+  id: serial("id").primaryKey(),
+  email: varchar("email").unique().notNull(),
+  password: varchar("password").notNull(), // Hashed password
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
-  profileImageUrl: varchar("profile_image_url"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// Goals table for AI-generated schedules
+// Goals table
 export const goals = pgTable("goals", {
   id: serial("id").primaryKey(),
-  userId: varchar("user_id").notNull().references(() => users.id),
+  userId: integer("user_id").notNull().references(() => users.id),
   title: text("title").notNull(),
   description: text("description"),
   category: varchar("category").notNull(), // work, health, leisure, social, learning
   priority: varchar("priority").default("medium"), // low, medium, high
   targetDate: date("target_date"),
   isCompleted: boolean("is_completed").default(false),
-  aiGenerated: boolean("ai_generated").default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -54,7 +42,7 @@ export const goals = pgTable("goals", {
 // Events/Schedule items
 export const events = pgTable("events", {
   id: serial("id").primaryKey(),
-  userId: varchar("user_id").notNull().references(() => users.id),
+  userId: integer("user_id").notNull().references(() => users.id),
   goalId: integer("goal_id").references(() => goals.id),
   title: text("title").notNull(),
   description: text("description"),
@@ -62,7 +50,6 @@ export const events = pgTable("events", {
   startTime: timestamp("start_time").notNull(),
   endTime: timestamp("end_time").notNull(),
   isCompleted: boolean("is_completed").default(false),
-  aiGenerated: boolean("ai_generated").default(false),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -70,7 +57,7 @@ export const events = pgTable("events", {
 // Daily balance scores
 export const dailyBalance = pgTable("daily_balance", {
   id: serial("id").primaryKey(),
-  userId: varchar("user_id").notNull().references(() => users.id),
+  userId: integer("user_id").notNull().references(() => users.id),
   date: date("date").notNull(),
   workPercentage: integer("work_percentage").default(0),
   healthPercentage: integer("health_percentage").default(0),
@@ -85,22 +72,12 @@ export const dailyBalance = pgTable("daily_balance", {
 // User streaks
 export const streaks = pgTable("streaks", {
   id: serial("id").primaryKey(),
-  userId: varchar("user_id").notNull().references(() => users.id),
+  userId: integer("user_id").notNull().references(() => users.id),
   currentStreak: integer("current_streak").default(0),
   longestStreak: integer("longest_streak").default(0),
   lastActivityDate: date("last_activity_date"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-});
-
-// AI Chat history
-export const chatHistory = pgTable("chat_history", {
-  id: serial("id").primaryKey(),
-  userId: varchar("user_id").notNull().references(() => users.id),
-  message: text("message").notNull(),
-  response: text("response").notNull(),
-  messageType: varchar("message_type").notNull(), // user, ai
-  createdAt: timestamp("created_at").defaultNow(),
 });
 
 // Relations
@@ -109,7 +86,6 @@ export const usersRelations = relations(users, ({ many }) => ({
   events: many(events),
   dailyBalance: many(dailyBalance),
   streaks: many(streaks),
-  chatHistory: many(chatHistory),
 }));
 
 export const goalsRelations = relations(goals, ({ one, many }) => ({
@@ -130,11 +106,13 @@ export const streaksRelations = relations(streaks, ({ one }) => ({
   user: one(users, { fields: [streaks.userId], references: [users.id] }),
 }));
 
-export const chatHistoryRelations = relations(chatHistory, ({ one }) => ({
-  user: one(users, { fields: [chatHistory.userId], references: [users.id] }),
-}));
-
 // Insert schemas
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export const insertGoalSchema = createInsertSchema(goals).omit({
   id: true,
   createdAt: true,
@@ -153,14 +131,9 @@ export const insertDailyBalanceSchema = createInsertSchema(dailyBalance).omit({
   updatedAt: true,
 });
 
-export const insertChatHistorySchema = createInsertSchema(chatHistory).omit({
-  id: true,
-  createdAt: true,
-});
-
 // Types
-export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
 export type Goal = typeof goals.$inferSelect;
 export type InsertGoal = z.infer<typeof insertGoalSchema>;
 export type Event = typeof events.$inferSelect;
@@ -168,5 +141,3 @@ export type InsertEvent = z.infer<typeof insertEventSchema>;
 export type DailyBalance = typeof dailyBalance.$inferSelect;
 export type InsertDailyBalance = z.infer<typeof insertDailyBalanceSchema>;
 export type Streak = typeof streaks.$inferSelect;
-export type ChatHistory = typeof chatHistory.$inferSelect;
-export type InsertChatHistory = z.infer<typeof insertChatHistorySchema>;

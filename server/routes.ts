@@ -1,351 +1,215 @@
-import type { Express } from "express";
-import { createServer, type Server } from "http";
-import { storage } from "./storage";
-import { setupAuth, isAuthenticated } from "./replitAuth";
-import { aiService } from "./services/aiService";
-import { insertGoalSchema, insertEventSchema, insertChatHistorySchema } from "@shared/schema";
+import express from "express";
+import { db } from "./db";
+import { goals, events, dailyBalance, streaks } from "../shared/schema";
+import { eq, desc } from "drizzle-orm";
+import { registerUser, loginUser, verifyToken, getUserById } from "./auth";
 import { z } from "zod";
 
-export async function registerRoutes(app: Express): Promise<Server> {
-  // Auth middleware
-  await setupAuth(app);
+declare global {
+  namespace Express {
+    interface Request {
+      user?: any;
+    }
+  }
+}
+
+// Validation schemas
+const registerSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(6, "Password must be at least 6 characters"),
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+});
+
+const loginSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(1, "Password is required"),
+});
+
+// Middleware to check authentication
+const isAuthenticated = async (req: express.Request, res: express.Response, next: express.NextFunction) => {
+  try {
+    console.log('Auth Middleware - Headers:', req.headers);
+    const token = req.headers.authorization?.split(" ")[1];
+    if (!token) {
+      console.log('Auth Middleware - No token provided');
+      return res.status(401).json({ message: "No token provided" });
+    }
+
+    console.log('Auth Middleware - Verifying token:', token);
+    const decoded = verifyToken(token);
+    req.user = decoded;
+    console.log('Auth Middleware - Token verified, user:', decoded);
+    next();
+  } catch (error) {
+    console.error('Auth Middleware - Error:', error);
+    res.status(401).json({ message: "Invalid token" });
+  }
+};
+
+export async function registerRoutes(app: express.Express) {
+  // Create a router for API routes
+  const apiRouter = express.Router();
 
   // Auth routes
-  app.get('/api/auth/user', isAuthenticated, async (req: any, res) => {
+  apiRouter.post("/auth/register", async (req, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const user = await storage.getUser(userId);
-      res.json(user);
+      // Validate request body
+      const validatedData = registerSchema.parse(req.body);
+      const result = await registerUser(
+        validatedData.email,
+        validatedData.password,
+        validatedData.firstName,
+        validatedData.lastName
+      );
+      res.json(result);
     } catch (error) {
-      console.error("Error fetching user:", error);
-      res.status(500).json({ message: "Failed to fetch user" });
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: error.errors[0].message 
+        });
+      }
+      res.status(400).json({ message: (error as Error).message });
+    }
+  });
+
+  apiRouter.post("/auth/login", async (req, res) => {
+    try {
+      console.log('Login attempt:', req.body);
+      // Validate request body
+      const validatedData = loginSchema.parse(req.body);
+      const result = await loginUser(validatedData.email, validatedData.password);
+      console.log('Login successful:', { userId: result.user.id, email: result.user.email });
+      res.json(result);
+    } catch (error) {
+      console.error('Login error:', error);
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ 
+          message: error.errors[0].message 
+        });
+      }
+      res.status(400).json({ message: (error as Error).message });
+    }
+  });
+
+  apiRouter.get("/auth/user", isAuthenticated, async (req, res) => {
+    try {
+      console.log('Get user request - User ID:', req.user.userId);
+      const user = await getUserById(req.user.userId);
+      if (!user) {
+        console.log('User not found:', req.user.userId);
+        return res.status(404).json({ message: "User not found" });
+      }
+      // Don't send the password
+      const { password, ...userWithoutPassword } = user;
+      // Get token from Authorization header
+      const token = req.headers.authorization?.split(" ")[1];
+      console.log('User found:', { id: user.id, email: user.email });
+      res.json({ ...userWithoutPassword, token });
+    } catch (error) {
+      console.error('Get user error:', error);
+      res.status(500).json({ message: "Error fetching user data" });
+    }
+  });
+
+  // Logout endpoint - no authentication required
+  apiRouter.get("/logout", async (req, res) => {
+    try {
+      console.log('Logout request received');
+      res.json({ message: "Logged out successfully" });
+    } catch (error) {
+      console.error('Logout error:', error);
+      res.status(500).json({ message: "Error during logout" });
+    }
+  });
+
+  // Chat routes
+  apiRouter.post("/chat/message", isAuthenticated, async (req, res) => {
+    try {
+      console.log('Chat message received:', req.body);
+      // For now, return a simple response
+      res.json({
+        message: "I'm your AI assistant. How can I help you today?",
+        type: "assistant"
+      });
+    } catch (error) {
+      console.error('Chat error:', error);
+      res.status(500).json({ message: "Error processing chat message" });
+    }
+  });
+
+  apiRouter.get("/chat/history", isAuthenticated, async (req, res) => {
+    try {
+      console.log('Fetching chat history for user:', req.user.userId);
+      // For now, return an empty array
+      res.json([]);
+    } catch (error) {
+      console.error('Chat history error:', error);
+      res.status(500).json({ message: "Error fetching chat history" });
+    }
+  });
+
+  // Dashboard routes
+  apiRouter.get("/dashboard/stats", isAuthenticated, async (req, res) => {
+    try {
+      const [currentStreak] = await db.query.streaks.findMany({
+        where: eq(streaks.userId, req.user.userId),
+        orderBy: (streaks, { desc }) => [desc(streaks.currentStreak)],
+        limit: 1,
+      });
+
+      const todayEvents = await db.query.events.findMany({
+        where: eq(events.userId, req.user.userId),
+      });
+
+      const completedTasks = todayEvents.filter(event => event.isCompleted).length;
+      const totalTasks = todayEvents.length;
+
+      res.json({
+        currentStreak: currentStreak?.currentStreak || 0,
+        tasksCompleted: completedTasks,
+        totalTasks: totalTasks,
+        weeklyAverage: 75, // Placeholder - implement actual calculation
+        todayEvents: todayEvents,
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Error fetching dashboard stats" });
+    }
+  });
+
+  apiRouter.get("/balance/today", isAuthenticated, async (req, res) => {
+    try {
+      const [todayBalance] = await db.query.dailyBalance.findMany({
+        where: eq(dailyBalance.userId, req.user.userId),
+        orderBy: (dailyBalance, { desc }) => [desc(dailyBalance.date)],
+        limit: 1,
+      });
+
+      res.json({
+        overallScore: todayBalance?.overallScore || 0,
+        workPercentage: todayBalance?.workPercentage || 0,
+        healthPercentage: todayBalance?.healthPercentage || 0,
+        leisurePercentage: todayBalance?.leisurePercentage || 0,
+        socialPercentage: todayBalance?.socialPercentage || 0,
+        learningPercentage: todayBalance?.learningPercentage || 0,
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Error fetching balance data" });
     }
   });
 
   // Goals routes
-  app.get('/api/goals', isAuthenticated, async (req: any, res) => {
+  apiRouter.get("/goals", isAuthenticated, async (req, res) => {
     try {
-      const userId = req.user.claims.sub;
-      const goals = await storage.getUserGoals(userId);
-      res.json(goals);
-    } catch (error) {
-      console.error("Error fetching goals:", error);
-      res.status(500).json({ message: "Failed to fetch goals" });
-    }
-  });
-
-  app.post('/api/goals', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const goalData = insertGoalSchema.parse({ ...req.body, userId });
-      const goal = await storage.createGoal(goalData);
-      res.json(goal);
-    } catch (error) {
-      console.error("Error creating goal:", error);
-      res.status(400).json({ message: "Failed to create goal" });
-    }
-  });
-
-  app.put('/api/goals/:id', isAuthenticated, async (req: any, res) => {
-    try {
-      const goalId = parseInt(req.params.id);
-      const updates = insertGoalSchema.partial().parse(req.body);
-      const goal = await storage.updateGoal(goalId, updates);
-      res.json(goal);
-    } catch (error) {
-      console.error("Error updating goal:", error);
-      res.status(400).json({ message: "Failed to update goal" });
-    }
-  });
-
-  app.delete('/api/goals/:id', isAuthenticated, async (req: any, res) => {
-    try {
-      const goalId = parseInt(req.params.id);
-      await storage.deleteGoal(goalId);
-      res.json({ message: "Goal deleted successfully" });
-    } catch (error) {
-      console.error("Error deleting goal:", error);
-      res.status(500).json({ message: "Failed to delete goal" });
-    }
-  });
-
-  // Events routes
-  app.get('/api/events', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const { startDate, endDate } = req.query;
-      
-      const start = startDate ? new Date(startDate as string) : undefined;
-      const end = endDate ? new Date(endDate as string) : undefined;
-      
-      const events = await storage.getUserEvents(userId, start, end);
-      res.json(events);
-    } catch (error) {
-      console.error("Error fetching events:", error);
-      res.status(500).json({ message: "Failed to fetch events" });
-    }
-  });
-
-  app.post('/api/events', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const eventData = insertEventSchema.parse({ ...req.body, userId });
-      const event = await storage.createEvent(eventData);
-      res.json(event);
-    } catch (error) {
-      console.error("Error creating event:", error);
-      res.status(400).json({ message: "Failed to create event" });
-    }
-  });
-
-  app.put('/api/events/:id', isAuthenticated, async (req: any, res) => {
-    try {
-      const eventId = parseInt(req.params.id);
-      const updates = insertEventSchema.partial().parse(req.body);
-      const event = await storage.updateEvent(eventId, updates);
-      res.json(event);
-    } catch (error) {
-      console.error("Error updating event:", error);
-      res.status(400).json({ message: "Failed to update event" });
-    }
-  });
-
-  app.delete('/api/events/:id', isAuthenticated, async (req: any, res) => {
-    try {
-      const eventId = parseInt(req.params.id);
-      await storage.deleteEvent(eventId);
-      res.json({ message: "Event deleted successfully" });
-    } catch (error) {
-      console.error("Error deleting event:", error);
-      res.status(500).json({ message: "Failed to delete event" });
-    }
-  });
-
-  // Balance routes
-  app.get('/api/balance/today', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const today = new Date().toISOString().split('T')[0];
-      const balance = await storage.getUserDailyBalance(userId, today);
-      res.json(balance);
-    } catch (error) {
-      console.error("Error fetching today's balance:", error);
-      res.status(500).json({ message: "Failed to fetch balance" });
-    }
-  });
-
-  app.get('/api/balance/history', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const days = parseInt(req.query.days as string) || 30;
-      const history = await storage.getUserBalanceHistory(userId, days);
-      res.json(history);
-    } catch (error) {
-      console.error("Error fetching balance history:", error);
-      res.status(500).json({ message: "Failed to fetch balance history" });
-    }
-  });
-
-  app.post('/api/balance/calculate', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const { date } = req.body;
-      
-      // Get events for the specified date
-      const startDate = new Date(date);
-      const endDate = new Date(date);
-      endDate.setDate(endDate.getDate() + 1);
-      
-      const events = await storage.getUserEvents(userId, startDate, endDate);
-      
-      // Calculate balance
-      const eventsWithDuration = events.map(event => ({
-        category: event.category,
-        duration: (new Date(event.endTime).getTime() - new Date(event.startTime).getTime()) / (1000 * 60), // minutes
-      }));
-      
-      const analysis = await aiService.analyzeBalance(eventsWithDuration);
-      
-      // Save balance to database
-      const balanceData = {
-        userId,
-        date,
-        workPercentage: analysis.categoryBreakdown.work,
-        healthPercentage: analysis.categoryBreakdown.health,
-        leisurePercentage: analysis.categoryBreakdown.leisure,
-        socialPercentage: analysis.categoryBreakdown.social,
-        learningPercentage: analysis.categoryBreakdown.learning,
-        overallScore: analysis.score,
-      };
-      
-      const balance = await storage.createDailyBalance(balanceData);
-      res.json({ balance, analysis });
-    } catch (error) {
-      console.error("Error calculating balance:", error);
-      res.status(500).json({ message: "Failed to calculate balance" });
-    }
-  });
-
-  // Streak routes
-  app.get('/api/streak', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const streak = await storage.getUserStreak(userId);
-      res.json(streak || { currentStreak: 0, longestStreak: 0 });
-    } catch (error) {
-      console.error("Error fetching streak:", error);
-      res.status(500).json({ message: "Failed to fetch streak" });
-    }
-  });
-
-  app.post('/api/streak/update', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const { completed } = req.body;
-      
-      const currentStreak = await storage.getUserStreak(userId);
-      const currentStreakCount = currentStreak?.currentStreak || 0;
-      const longestStreak = currentStreak?.longestStreak || 0;
-      
-      let newCurrentStreak = completed ? currentStreakCount + 1 : 0;
-      let newLongestStreak = Math.max(longestStreak, newCurrentStreak);
-      
-      const streak = await storage.updateStreak(userId, newCurrentStreak, newLongestStreak);
-      res.json(streak);
-    } catch (error) {
-      console.error("Error updating streak:", error);
-      res.status(500).json({ message: "Failed to update streak" });
-    }
-  });
-
-  // AI Chat routes
-  app.get('/api/chat/history', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const limit = parseInt(req.query.limit as string) || 50;
-      const history = await storage.getUserChatHistory(userId, limit);
-      res.json(history);
-    } catch (error) {
-      console.error("Error fetching chat history:", error);
-      res.status(500).json({ message: "Failed to fetch chat history" });
-    }
-  });
-
-  app.post('/api/chat/message', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const { message } = req.body;
-      
-      if (!message || typeof message !== 'string') {
-        return res.status(400).json({ message: "Message is required" });
-      }
-      
-      // Get recent chat history for context
-      const recentHistory = await storage.getUserChatHistory(userId, 5);
-      const context = recentHistory.map(chat => `${chat.messageType}: ${chat.message}`);
-      
-      // Generate AI response
-      const aiResponse = await aiService.generateChatResponse(message, context);
-      
-      // Save user message
-      await storage.createChatHistory({
-        userId,
-        message,
-        response: aiResponse,
-        messageType: 'user',
+      const userGoals = await db.query.goals.findMany({
+        where: eq(goals.userId, req.user.userId),
       });
-      
-      // Save AI response
-      await storage.createChatHistory({
-        userId,
-        message: aiResponse,
-        response: '',
-        messageType: 'ai',
-      });
-      
-      res.json({ response: aiResponse });
+      res.json(userGoals);
     } catch (error) {
-      console.error("Error processing chat message:", error);
-      res.status(500).json({ message: "Failed to process message" });
+      res.status(500).json({ message: "Error fetching goals" });
     }
   });
 
-  // AI Schedule Generation
-  app.post('/api/ai/generate-schedule', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const { goals, preferences } = req.body;
-      
-      if (!goals || typeof goals !== 'string') {
-        return res.status(400).json({ message: "Goals are required" });
-      }
-      
-      // Get current events for context
-      const today = new Date();
-      const tomorrow = new Date(today);
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      
-      const currentEvents = await storage.getUserEvents(userId, today, tomorrow);
-      const currentSchedule = currentEvents.map(event => ({
-        title: event.title,
-        startTime: event.startTime.toISOString(),
-        endTime: event.endTime.toISOString(),
-        category: event.category,
-      }));
-      
-      const scheduleResponse = await aiService.generateSchedule({
-        goals,
-        preferences,
-        currentSchedule,
-      });
-      
-      res.json(scheduleResponse);
-    } catch (error) {
-      console.error("Error generating schedule:", error);
-      res.status(500).json({ message: "Failed to generate schedule" });
-    }
-  });
-
-  // Dashboard stats
-  app.get('/api/dashboard/stats', isAuthenticated, async (req: any, res) => {
-    try {
-      const userId = req.user.claims.sub;
-      const today = new Date().toISOString().split('T')[0];
-      
-      // Get today's events
-      const startDate = new Date(today);
-      const endDate = new Date(today);
-      endDate.setDate(endDate.getDate() + 1);
-      
-      const todayEvents = await storage.getUserEvents(userId, startDate, endDate);
-      const completedEvents = todayEvents.filter(event => event.isCompleted);
-      
-      // Get streak
-      const streak = await storage.getUserStreak(userId);
-      
-      // Get balance
-      const balance = await storage.getUserDailyBalance(userId, today);
-      
-      // Get weekly average
-      const weeklyHistory = await storage.getUserBalanceHistory(userId, 7);
-      const weeklyAverage = weeklyHistory.length > 0 
-        ? Math.round(weeklyHistory.reduce((sum, day) => sum + day.overallScore, 0) / weeklyHistory.length)
-        : 0;
-      
-      res.json({
-        currentStreak: streak?.currentStreak || 0,
-        balanceScore: balance?.overallScore || 0,
-        tasksCompleted: completedEvents.length,
-        totalTasks: todayEvents.length,
-        weeklyAverage,
-        todayEvents: todayEvents.slice(0, 4), // Limit to 4 for dashboard
-      });
-    } catch (error) {
-      console.error("Error fetching dashboard stats:", error);
-      res.status(500).json({ message: "Failed to fetch dashboard stats" });
-    }
-  });
-
-  const httpServer = createServer(app);
-  return httpServer;
+  // Mount the API router
+  app.use("/api", apiRouter);
 }
