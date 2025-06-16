@@ -17,9 +17,16 @@ export default function Calendar() {
   const { data: events = [] } = useQuery({
     queryKey: ["/api/events", startOfMonth.toISOString(), endOfMonth.toISOString()],
     queryFn: async () => {
+      const token = localStorage.getItem('token'); // or however you store it
       const response = await fetch(
         `/api/events?startDate=${startOfMonth.toISOString()}&endDate=${endOfMonth.toISOString()}`,
-        { credentials: "include" }
+        { 
+          credentials: "include",
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
       );
       if (!response.ok) throw new Error("Failed to fetch events");
       return response.json();

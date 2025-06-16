@@ -28,19 +28,23 @@ export function useAuth() {
   const logout = useCallback(async () => {
     try {
       // Make the logout request
-      await fetch('http://localhost:5000/api/logout', {
+      await fetch('/api/logout', {
         method: 'GET',
-        credentials: 'include'
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
       });
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
-      // Always clear the token and redirect
+      // Always clear the token and user data
       localStorage.removeItem('token');
+      // Clear React Query cache
+      queryClient.clear();
       // Use setLocation for proper routing
       setLocation('/');
     }
-  }, [setLocation]);
+  }, [setLocation, queryClient, token]);
 
   console.log('Auth State:', { 
     user, 

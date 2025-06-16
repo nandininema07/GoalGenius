@@ -19,7 +19,7 @@ interface SidebarProps {
 
 export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const { theme, setTheme } = useTheme();
-  const { user } = useAuth();
+  const { user, logout } = useAuth(); // Make sure logout function is available from useAuth
   const [location, setLocation] = useLocation();
 
   const toggleTheme = () => {
@@ -36,6 +36,20 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const handleNavigation = (item: typeof navItems[0]) => {
     setLocation(item.path);
     onTabChange(item.id);
+  };
+
+  const handleLogout = async () => {
+    try {
+      // Call logout function from useAuth hook
+      await logout();
+      // Redirect to landing page
+      setLocation('/');
+    } catch (error) {
+      console.error('Logout error:', error);
+      // Even if API call fails, clear local storage and redirect
+      localStorage.removeItem('token');
+      setLocation('/');
+    }
   };
 
   const getUserInitials = () => {
@@ -67,7 +81,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
         <nav className="space-y-2">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = location === item.path || (item.path === '/' && location === '/');
+            const isActive = location === item.path;
             return (
               <Button
                 key={item.id}
@@ -118,7 +132,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
         <Button
           variant="outline"
           className="w-full"
-          onClick={() => window.location.href = '/api/logout'}
+          onClick={handleLogout}
         >
           Sign Out
         </Button>

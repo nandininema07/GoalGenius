@@ -80,6 +80,33 @@ export const streaks = pgTable("streaks", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Add this to your shared/schema.ts file
+
+// (Removed duplicate import of pgTable and other symbols)
+
+// Add this table to your existing schema
+export const chatMessages = pgTable('chat_messages', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id').notNull(),
+  message: text('message').notNull(),
+  messageType: varchar('message_type', { length: 10 }).notNull(), // 'user' or 'ai'
+  relatedMessageId: integer('related_message_id'), // For linking AI responses to user messages
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+// If you want to add relations (optional)
+export const chatMessagesRelations = relations(chatMessages, ({ one }) => ({
+  user: one(users, {
+    fields: [chatMessages.userId],
+    references: [users.id],
+  }),
+  relatedMessage: one(chatMessages, {
+    fields: [chatMessages.relatedMessageId],
+    references: [chatMessages.id],
+  }),
+}));
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   goals: many(goals),
@@ -130,6 +157,8 @@ export const insertDailyBalanceSchema = createInsertSchema(dailyBalance).omit({
   createdAt: true,
   updatedAt: true,
 });
+
+
 
 // Types
 export type User = typeof users.$inferSelect;

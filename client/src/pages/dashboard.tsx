@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { useAuth } from "../hooks/useAuth";
@@ -7,6 +7,8 @@ import { BalanceMeter } from "../components/BalanceMeter";
 import { Flame, Scale, CheckCircle, TrendingUp, Clock, Circle, ChartLine, Moon, Sun } from "lucide-react";
 
 export default function Dashboard() {
+  const queryClient = useQueryClient();
+  
   const { data: stats, isLoading } = useQuery({
     queryKey: ["/api/dashboard/stats"],
   });
@@ -14,6 +16,45 @@ export default function Dashboard() {
   const { data: balance } = useQuery({
     queryKey: ["/api/balance/today"],
   });
+
+  // Mutation to mark event as complete/incomplete
+  const toggleEventCompletion = useMutation({
+  mutationFn: async ({ eventId, isCompleted }: { eventId: string; isCompleted: boolean }) => {
+    // Get the token from localStorage or wherever you store it
+    const token = localStorage.getItem('token'); // Adjust this based on how you store the token
+    
+    const response = await fetch(`/api/events/${eventId}/toggle-completion`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`, // Add the Authorization header
+      },
+      body: JSON.stringify({ isCompleted }),
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to update event completion status');
+    }
+    
+    return response.json();
+  },
+  onSuccess: () => {
+    // Refetch dashboard stats and balance to update UI
+    queryClient.invalidateQueries({ queryKey: ["/api/dashboard/stats"] });
+    queryClient.invalidateQueries({ queryKey: ["/api/balance/today"] });
+  },
+  onError: (error) => {
+    console.error('Error updating event completion:', error);
+    // You might want to show a toast notification here
+  }
+});
+
+  const handleToggleEventCompletion = (eventId: string, currentStatus: boolean) => {
+    toggleEventCompletion.mutate({
+      eventId,
+      isCompleted: !currentStatus
+    });
+  };
 
   if (isLoading) {
     return (
@@ -41,11 +82,34 @@ export default function Dashboard() {
     return colors[category as keyof typeof colors] || "bg-gray-500";
   };
 
-  const getStatusIcon = (isCompleted: boolean) => {
-    if (isCompleted) {
-      return <CheckCircle className="w-4 h-4 text-emerald-500" />;
+  const getStatusIcon = (isCompleted: boolean, eventId: string, isUpdating: boolean = false) => {
+    if (isUpdating) {
+      return (
+        <div className="w-4 h-4 animate-spin rounded-full border-2 border-gray-300 border-t-primary-500" />
+      );
     }
-    return <Circle className="w-4 h-4 text-gray-300" />;
+    
+    if (isCompleted) {
+      return (
+        <button
+          onClick={() => handleToggleEventCompletion(eventId, isCompleted)}
+          className="p-1 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors"
+          title="Mark as incomplete"
+        >
+          <CheckCircle className="w-4 h-4 text-emerald-500" />
+        </button>
+      );
+    }
+    
+    return (
+      <button
+        onClick={() => handleToggleEventCompletion(eventId, isCompleted)}
+        className="p-1 hover:bg-gray-100 dark:hover:bg-gray-600 rounded transition-colors"
+        title="Mark as complete"
+      >
+        <Circle className="w-4 h-4 text-gray-300 hover:text-emerald-500 transition-colors" />
+      </button>
+    );
   };
 
   return (
@@ -199,11 +263,19 @@ export default function Dashboard() {
                 stats.todayEvents.map((event: any) => (
                   <div
                     key={event.id}
-                    className="flex items-center space-x-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
+                    className={`flex items-center space-x-4 p-3 rounded-lg transition-all ${
+                      event.isCompleted 
+                        ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800' 
+                        : 'bg-gray-50 dark:bg-gray-700'
+                    }`}
                   >
                     <div className={`w-2 h-2 ${getCategoryColor(event.category)} rounded-full`}></div>
                     <div className="flex-1">
-                      <div className="font-medium text-gray-900 dark:text-white">
+                      <div className={`font-medium ${
+                        event.isCompleted 
+                          ? 'text-gray-600 dark:text-gray-400 line-through' 
+                          : 'text-gray-900 dark:text-white'
+                      }`}>
                         {event.title}
                       </div>
                       <div className="text-sm text-gray-500">
@@ -212,7 +284,11 @@ export default function Dashboard() {
                         {new Date(event.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </div>
                     </div>
-                    {getStatusIcon(event.isCompleted)}
+                    {getStatusIcon(
+                      event.isCompleted, 
+                      event.id, 
+                      toggleEventCompletion.isPending
+                    )}
                   </div>
                 ))
               ) : (

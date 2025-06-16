@@ -38,33 +38,10 @@ function AuthenticatedApp({ children }: { children: React.ReactNode }) {
   );
 }
 
-function Router() {
+// Protected Route Component
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
-  const [location, setLocation] = useLocation();
-
-  // Force redirect to landing page if not authenticated and on protected route
-  useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      const protectedRoutes = ['/dashboard', '/calendar', '/ai-chat', '/analytics'];
-      if (protectedRoutes.includes(location)) {
-        console.log('Redirecting unauthenticated user to landing page');
-        setLocation('/');
-      }
-    }
-  }, [isAuthenticated, isLoading, location, setLocation]);
-
-  // Force redirect to dashboard if authenticated and on landing/auth pages
-  useEffect(() => {
-    if (!isLoading && isAuthenticated) {
-      const publicRoutes = ['/', '/auth/login', '/auth/register'];
-      if (publicRoutes.includes(location)) {
-        console.log('Redirecting authenticated user to dashboard');
-        setLocation('/dashboard');
-      }
-    }
-  }, [isAuthenticated, isLoading, location, setLocation]);
-
-  console.log('Router State:', { isAuthenticated, isLoading, location });
+  const [, setLocation] = useLocation();
 
   if (isLoading) {
     return (
@@ -74,38 +51,81 @@ function Router() {
     );
   }
 
+  if (!isAuthenticated) {
+    setLocation('/auth/login');
+    return null;
+  }
+
+  return <AuthenticatedApp>{children}</AuthenticatedApp>;
+}
+
+// Public Route Component (redirects to dashboard if authenticated)
+function PublicRoute({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading } = useAuth();
+  const [, setLocation] = useLocation();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-gray-900">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-500"></div>
+      </div>
+    );
+  }
+
+  if (isAuthenticated) {
+    setLocation('/dashboard');
+    return null;
+  }
+
+  return <>{children}</>;
+}
+
+function Router() {
   return (
     <Switch>
-      {/* Public routes (always accessible) */}
-      <Route path="/" component={isAuthenticated ? () => null : Landing} />
-      <Route path="/auth/login" component={isAuthenticated ? () => null : Login} />
-      <Route path="/auth/register" component={isAuthenticated ? () => null : Register} />
+      {/* Public routes */}
+      <Route path="/">
+        <PublicRoute>
+          <Landing />
+        </PublicRoute>
+      </Route>
       
-      {/* Protected routes (only for authenticated users) */}
-      {isAuthenticated && (
-        <>
-          <Route path="/dashboard">
-            <AuthenticatedApp>
-              <Dashboard />
-            </AuthenticatedApp>
-          </Route>
-          <Route path="/calendar">
-            <AuthenticatedApp>
-              <Calendar />
-            </AuthenticatedApp>
-          </Route>
-          <Route path="/ai-chat">
-            <AuthenticatedApp>
-              <AIChat />
-            </AuthenticatedApp>
-          </Route>
-          <Route path="/analytics">
-            <AuthenticatedApp>
-              <Analytics />
-            </AuthenticatedApp>
-          </Route>
-        </>
-      )}
+      <Route path="/auth/login">
+        <PublicRoute>
+          <Login />
+        </PublicRoute>
+      </Route>
+      
+      <Route path="/auth/register">
+        <PublicRoute>
+          <Register />
+        </PublicRoute>
+      </Route>
+      
+      {/* Protected routes */}
+      <Route path="/dashboard">
+        <ProtectedRoute>
+          <Dashboard />
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/calendar">
+        <ProtectedRoute>
+          <Calendar />
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/ai-chat">
+        <ProtectedRoute>
+          <AIChat />
+        </ProtectedRoute>
+      </Route>
+      
+      <Route path="/analytics">
+        <ProtectedRoute>
+          <Analytics />
+        </ProtectedRoute>
+      </Route>
       
       <Route component={NotFound} />
     </Switch>
