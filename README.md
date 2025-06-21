@@ -73,7 +73,7 @@ GoalGenius is an intelligent progress tracking application that uses AI to help 
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/goalgenius.git
+   git clone https://github.com/nandininema07/goalgenius.git
    cd goalgenius
    ```
 
